@@ -110,13 +110,13 @@ public class EventServiceImpl implements EventService {
     public EventFullDto adminUpdateEvent(Long eventId, UpdateEventAdminRequest dto) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new NotFoundException("Event with id=" + eventId + " was not found"));
+        if (dto.getEventDate() != null && dto.getEventDate().isBefore(LocalDateTime.now().plusHours(1))) {
+            throw new ValidationException("Event date must be at least 1 hour from now");
+        }
         if (dto.getStateAction() == AdminStateAction.PUBLISH_EVENT) {
             if (event.getState() != EventState.PENDING) {
                 throw new ConflictException("Cannot publish the event because it's not in the right state: "
                         + event.getState());
-            }
-            if (dto.getEventDate() != null && dto.getEventDate().isBefore(LocalDateTime.now().plusHours(1))) {
-                throw new ValidationException("Event date must be at least 1 hour from publication");
             }
             event.setPublishedOn(LocalDateTime.now());
             event.setState(EventState.PUBLISHED);
@@ -135,6 +135,9 @@ public class EventServiceImpl implements EventService {
                                                    LocalDateTime rangeStart, LocalDateTime rangeEnd,
                                                    boolean onlyAvailable, EventSort sort,
                                                    int from, int size, String ip) {
+        if (rangeStart != null && rangeEnd != null && rangeStart.isAfter(rangeEnd)) {
+            throw new ValidationException("rangeStart must not be after rangeEnd");
+        }
         recordHit("/events", ip);
         Specification<Event> spec = buildPublicSpec(text, categories, paid, rangeStart, rangeEnd);
         List<Event> events = eventRepository.findAll(spec);
@@ -218,7 +221,7 @@ public class EventServiceImpl implements EventService {
                     .map(id -> "/events/" + id)
                     .collect(Collectors.toList());
             LocalDateTime start = LocalDateTime.of(2000, 1, 1, 0, 0, 0);
-            List<ViewStatsDto> stats = statsClient.getStats(start, LocalDateTime.now(), uris, false);
+            List<ViewStatsDto> stats = statsClient.getStats(start, LocalDateTime.now(), uris, true);
             return stats.stream()
                     .collect(Collectors.toMap(
                             s -> Long.parseLong(s.getUri().replace("/events/", "")),

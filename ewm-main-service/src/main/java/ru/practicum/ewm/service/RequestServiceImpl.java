@@ -115,12 +115,10 @@ public class RequestServiceImpl implements RequestService {
             if (dto.getStatus() == RequestStatus.CONFIRMED) {
                 long confirmedCount = requestRepository.countByEventIdAndStatus(eventId, RequestStatus.CONFIRMED);
                 if (event.getParticipantLimit() != 0 && confirmedCount >= event.getParticipantLimit()) {
-                    request.setStatus(RequestStatus.REJECTED);
-                    rejected.add(RequestMapper.toDto(requestRepository.save(request)));
-                } else {
-                    request.setStatus(RequestStatus.CONFIRMED);
-                    confirmed.add(RequestMapper.toDto(requestRepository.save(request)));
+                    throw new ConflictException("The participant limit has been reached");
                 }
+                request.setStatus(RequestStatus.CONFIRMED);
+                confirmed.add(RequestMapper.toDto(requestRepository.save(request)));
             } else {
                 request.setStatus(RequestStatus.REJECTED);
                 rejected.add(RequestMapper.toDto(requestRepository.save(request)));
