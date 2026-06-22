@@ -4,12 +4,14 @@ WORKDIR /build
 COPY pom.xml .
 COPY stats/pom.xml stats/
 COPY stats/stats-dto/pom.xml stats/stats-dto/
+COPY stats/stats-dto/src stats/stats-dto/src
 COPY stats/stats-server/pom.xml stats/stats-server/
 COPY stats/stats-client/pom.xml stats/stats-client/
+COPY stats/stats-client/src stats/stats-client/src
 COPY ewm-main-service/pom.xml ewm-main-service/
 COPY ewm-main-service/src ewm-main-service/src
 
-RUN mvn -pl ewm-main-service package -DskipTests -B
+RUN mvn -pl ewm-main-service -am package -DskipTests -B
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
