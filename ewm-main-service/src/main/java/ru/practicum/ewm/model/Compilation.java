@@ -34,7 +34,7 @@ public class Compilation {
     @Column(nullable = false)
     private boolean pinned;
 
-    @Column(nullable = false, length = 50)
+    @Column(nullable = false, unique = true, length = 50)
     private String title;
 
     @ManyToMany

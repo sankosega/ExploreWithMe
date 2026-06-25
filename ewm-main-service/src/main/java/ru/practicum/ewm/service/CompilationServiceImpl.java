@@ -11,12 +11,9 @@ import ru.practicum.ewm.error.NotFoundException;
 import ru.practicum.ewm.mapper.CompilationMapper;
 import ru.practicum.ewm.model.Compilation;
 import ru.practicum.ewm.model.Event;
-import ru.practicum.ewm.model.enums.RequestStatus;
 import ru.practicum.ewm.repository.CompilationRepository;
 import ru.practicum.ewm.repository.EventRepository;
-import ru.practicum.ewm.repository.ParticipationRequestRepository;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +27,8 @@ public class CompilationServiceImpl implements CompilationService {
 
     private final CompilationRepository compilationRepository;
     private final EventRepository eventRepository;
-    private final ParticipationRequestRepository requestRepository;
+    private final RequestCounterService requestCounterService;
+    private final StatsFacade statsFacade;
 
     @Override
     @Transactional
@@ -50,15 +48,8 @@ public class CompilationServiceImpl implements CompilationService {
     public CompilationDto update(Long compId, UpdateCompilationRequest dto) {
         Compilation compilation = compilationRepository.findById(compId)
                 .orElseThrow(() -> new NotFoundException("Compilation with id=" + compId + " was not found"));
-        if (dto.getTitle() != null) {
-            compilation.setTitle(dto.getTitle());
-        }
-        if (dto.getPinned() != null) {
-            compilation.setPinned(dto.getPinned());
-        }
-        if (dto.getEvents() != null) {
-            compilation.setEvents(resolveEvents(dto.getEvents()));
-        }
+        Set<Event> events = dto.getEvents() != null ? resolveEvents(dto.getEvents()) : null;
+        CompilationMapper.update(compilation, dto, events);
         return toDto(compilationRepository.save(compilation));
     }
 
@@ -94,26 +85,19 @@ public class CompilationServiceImpl implements CompilationService {
         if (eventIds == null || eventIds.isEmpty()) {
             return new HashSet<>();
         }
-        return new HashSet<>(eventRepository.findAllById(eventIds));
+        List<Event> found = eventRepository.findAllById(eventIds);
+        if (found.size() != eventIds.size()) {
+            throw new NotFoundException("Some events from the list were not found");
+        }
+        return new HashSet<>(found);
     }
 
     private CompilationDto toDto(Compilation compilation) {
         List<Long> eventIds = compilation.getEvents().stream()
                 .map(Event::getId)
                 .collect(Collectors.toList());
-        Map<Long, Long> confirmedMap = getConfirmedMap(eventIds);
-        return CompilationMapper.toDto(compilation, confirmedMap, Collections.emptyMap());
-    }
-
-    private Map<Long, Long> getConfirmedMap(List<Long> eventIds) {
-        if (eventIds.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        return requestRepository.countByEventIdsAndStatus(eventIds, RequestStatus.CONFIRMED)
-                .stream()
-                .collect(Collectors.toMap(
-                        arr -> (Long) arr[0],
-                        arr -> (Long) arr[1]
-                ));
+        Map<Long, Long> confirmedMap = requestCounterService.getConfirmedRequestsMap(eventIds);
+        Map<Long, Long> viewsMap = statsFacade.getViewsMap(eventIds);
+        return CompilationMapper.toDto(compilation, confirmedMap, viewsMap);
     }
 }

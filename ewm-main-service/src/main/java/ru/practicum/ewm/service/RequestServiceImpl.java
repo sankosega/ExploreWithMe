@@ -14,6 +14,7 @@ import ru.practicum.ewm.model.ParticipationRequest;
 import ru.practicum.ewm.model.User;
 import ru.practicum.ewm.model.enums.EventState;
 import ru.practicum.ewm.model.enums.RequestStatus;
+import ru.practicum.ewm.model.enums.RequestUpdateStatus;
 import ru.practicum.ewm.repository.EventRepository;
 import ru.practicum.ewm.repository.ParticipationRequestRepository;
 import ru.practicum.ewm.repository.UserRepository;
@@ -82,7 +83,7 @@ public class RequestServiceImpl implements RequestService {
     @Override
     @Transactional
     public ParticipationRequestDto cancel(Long userId, Long requestId) {
-        ParticipationRequest request = requestRepository.findById(requestId)
+        ParticipationRequest request = requestRepository.findByIdAndRequesterId(requestId, userId)
                 .orElseThrow(() -> new NotFoundException("Request with id=" + requestId + " was not found"));
         request.setStatus(RequestStatus.CANCELED);
         return RequestMapper.toDto(requestRepository.save(request));
@@ -104,7 +105,12 @@ public class RequestServiceImpl implements RequestService {
         Event event = eventRepository.findByIdAndInitiatorId(eventId, userId)
                 .orElseThrow(() -> new NotFoundException("Event with id=" + eventId + " was not found"));
 
-        List<ParticipationRequest> requests = requestRepository.findAllById(dto.getRequestIds());
+        List<ParticipationRequest> requests =
+                requestRepository.findAllByIdInAndEventId(dto.getRequestIds(), eventId);
+        if (requests.size() != dto.getRequestIds().size()) {
+            throw new NotFoundException("Some requests were not found for event id=" + eventId);
+        }
+
         List<ParticipationRequestDto> confirmed = new ArrayList<>();
         List<ParticipationRequestDto> rejected = new ArrayList<>();
 
@@ -112,7 +118,7 @@ public class RequestServiceImpl implements RequestService {
             if (request.getStatus() != RequestStatus.PENDING) {
                 throw new ConflictException("Request must have status PENDING");
             }
-            if (dto.getStatus() == RequestStatus.CONFIRMED) {
+            if (dto.getStatus() == RequestUpdateStatus.CONFIRMED) {
                 long confirmedCount = requestRepository.countByEventIdAndStatus(eventId, RequestStatus.CONFIRMED);
                 if (event.getParticipantLimit() != 0 && confirmedCount >= event.getParticipantLimit()) {
                     throw new ConflictException("The participant limit has been reached");
@@ -122,6 +128,18 @@ public class RequestServiceImpl implements RequestService {
             } else {
                 request.setStatus(RequestStatus.REJECTED);
                 rejected.add(RequestMapper.toDto(requestRepository.save(request)));
+            }
+        }
+
+        if (dto.getStatus() == RequestUpdateStatus.CONFIRMED && event.getParticipantLimit() != 0) {
+            long confirmedCount = requestRepository.countByEventIdAndStatus(eventId, RequestStatus.CONFIRMED);
+            if (confirmedCount >= event.getParticipantLimit()) {
+                List<ParticipationRequest> remaining =
+                        requestRepository.findAllByEventIdAndStatus(eventId, RequestStatus.PENDING);
+                for (ParticipationRequest pending : remaining) {
+                    pending.setStatus(RequestStatus.REJECTED);
+                    rejected.add(RequestMapper.toDto(requestRepository.save(pending)));
+                }
             }
         }
 

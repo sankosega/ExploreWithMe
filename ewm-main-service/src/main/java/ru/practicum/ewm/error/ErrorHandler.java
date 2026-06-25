@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -41,6 +42,17 @@ public class ErrorHandler {
     public ApiError handleValidation(final ValidationException e) {
         log.warn("400: {}", e.getMessage());
         return buildError(HttpStatus.BAD_REQUEST, "Incorrectly made request.", e.getMessage());
+    }
+
+    @ExceptionHandler
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiError handleConstraintViolation(final ConstraintViolationException e) {
+        String message = e.getConstraintViolations().stream()
+                .map(cv -> cv.getPropertyPath() + ": " + cv.getMessage())
+                .findFirst()
+                .orElse(e.getMessage());
+        log.warn("400 ConstraintViolation: {}", message);
+        return buildError(HttpStatus.BAD_REQUEST, "Incorrectly made request.", message);
     }
 
     @ExceptionHandler
