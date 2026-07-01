@@ -33,6 +33,9 @@ public class StatsServiceImpl implements StatsService {
     @Override
     public List<ViewStatsDto> getStats(LocalDateTime start, LocalDateTime end,
                                        List<String> uris, boolean unique) {
+        if (start != null && end != null && start.isAfter(end)) {
+            throw new IllegalArgumentException("Start date must not be after end date");
+        }
         if (uris == null || uris.isEmpty()) {
             return unique
                     ? hitRepository.findStatsUnique(start, end)
